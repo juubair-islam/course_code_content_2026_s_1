@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ui_class/data/dummy_data.dart';
-import 'package:flutter_ui_class/models/card_data_model.dart';
-import 'package:flutter_ui_class/providers/task_management_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Added for Firebase
 import 'package:flutter_ui_class/utils/validators.dart';
 import 'package:flutter_ui_class/widgets/core_input_field.dart';
 import 'package:flutter_ui_class/widgets/password_input_filed.dart';
-import 'package:provider/provider.dart';
 
 class AddTaskPage extends StatefulWidget {
   const AddTaskPage({super.key});
@@ -23,13 +20,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   final _formKey = GlobalKey<FormState>();
 
-  late TaskManagementProvider taskProvider;
-
-  @override
-  void initState() {
-    taskProvider = Provider.of<TaskManagementProvider>(context, listen: false);
-    super.initState();
-  }
+  // Removed TaskManagementProvider because we are using Firebase directly now!
 
   @override
   void dispose() {
@@ -38,20 +29,22 @@ class _AddTaskPageState extends State<AddTaskPage> {
     _phoneNumberController.clear();
     _passwordController.clear();
     _descriptionController.clear();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Add Task"),
+        title: const Text("Add Task"),
         backgroundColor: Colors.purpleAccent,
       ),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Form(
           key: _formKey,
-          child: Column(
+          // Changed Column to ListView so the keyboard doesn't cover the inputs and cause errors
+          child: ListView(
             children: [
               CoreInputField(
                 controller: _titleController,
@@ -60,7 +53,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 labelText: "Task Title",
                 validator: CustomValidators.validateTaskTitle,
               ),
-
               const SizedBox(height: 20),
               CoreInputField(
                 controller: _assignedToController,
@@ -69,7 +61,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 labelText: "Assigned To",
                 validator: CustomValidators.validateAssignedTo,
               ),
-
               const SizedBox(height: 20),
               CoreInputField(
                 controller: _phoneNumberController,
@@ -78,10 +69,8 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 labelText: "Phone Number",
                 validator: CustomValidators.validatePhoneNumber,
               ),
-
               const SizedBox(height: 20),
               PasswordInputFiled(controller: _passwordController),
-
               const SizedBox(height: 40),
               CoreInputField(
                 controller: _descriptionController,
@@ -94,42 +83,57 @@ class _AddTaskPageState extends State<AddTaskPage> {
           ),
         ),
       ),
-
       bottomNavigationBar: Container(
-        padding: EdgeInsets.symmetric(horizontal: 30, vertical: 30),
+        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 30),
         child: ElevatedButton(
-          onPressed: () {
+          // Made this function async to handle Firebase
+          onPressed: () async {
             if (_formKey.currentState!.validate()) {
               final String taskDetails =
                   "Assigned to: ${_assignedToController.text} \nPhone: ${_phoneNumberController.text} \nDescription: ${_descriptionController.text} \n \n The task Password is ${_passwordController.text}";
 
-              taskProvider.addTaskExternal(
-                CardDataModel(
-                  title: _titleController.text,
-                  subtitle: taskDetails,
-                ),
-              );
+              // 🔥 DIRECT FIREBASE SAVE LOGIC 🔥
+              try {
+                await FirebaseFirestore.instance.collection('tasks').add({
+                  'title': _titleController.text,
+                  'subtitle': taskDetails,
+                  'createdAt': FieldValue.serverTimestamp(),
+                });
 
-              Navigator.of(context).pop();
+                // context.mounted prevents a crash if the user closes the page before Firebase finishes saving
+                if (context.mounted) {
+                  Navigator.of(context).pop();
 
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    "Task added successfully!,",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  backgroundColor: Colors.green,
-                ),
-              );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        "Task added successfully!",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                print("Error adding task to Firebase: $e");
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Failed to add task: $e"),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
             }
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.purpleAccent,
             foregroundColor: Colors.white,
-            padding: EdgeInsets.symmetric(vertical: 16),
-            textStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
-          child: Text("Add Task"),
+          child: const Text("Add Task"),
         ),
       ),
     );

@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart'; // Added for Firebase
+import 'firebase_options.dart'; // Added for Firebase
 import 'package:flutter_ui_class/providers/task_management_provider.dart';
-import 'package:flutter_ui_class/screens/UI_page.dart';
+import 'package:flutter_ui_class/screens/UI_page.dart'; // Note: check if your file is named UI_page.dart or ui_page.dart
 import 'package:provider/provider.dart';
 
-void main() {
+void main() async {
+  // These two lines ensure Firebase starts up correctly before your app runs
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   runApp(const FlutterUIApp());
 }
 
@@ -147,7 +155,6 @@ class _HomePageState extends State<HomePage> {
                       Navigator.of(context).push(
                         MaterialPageRoute(builder: (context) => UiPage(),)
                       );
-
 
                     },
                     color: Colors.purpleAccent,

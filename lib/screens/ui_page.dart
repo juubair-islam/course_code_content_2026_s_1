@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_ui_class/data/dummy_data.dart';
-import 'package:flutter_ui_class/models/card_data_model.dart';
-import 'package:flutter_ui_class/providers/task_management_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Added for Firebase
 import 'package:flutter_ui_class/screens/add_task_page.dart';
 import 'package:flutter_ui_class/widgets/task_card_widget.dart';
-import 'package:provider/provider.dart';
 
 class UiPage extends StatefulWidget {
   const UiPage({super.key});
@@ -14,42 +11,76 @@ class UiPage extends StatefulWidget {
 }
 
 class _UiPageState extends State<UiPage> {
-
-
-  
-  DummyData dummyDataInstance = DummyData();
-
-
   @override
   Widget build(BuildContext context) {
     print("Building UI Page...");
-    
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("UI PAGE"),
+        title: const Text("UI PAGE"),
         backgroundColor: Colors.purpleAccent,
       ),
 
-      body: Consumer<TaskManagementProvider>(
-        builder: (context, taskProvider, _) {
-          return RefreshIndicator(
-              onRefresh: () async {
-                setState(() {});
-              },
-            child: ListView.builder(
-              padding: EdgeInsets.all(16),
-              itemCount: taskProvider.tasks.length,
-              itemBuilder: (context, index) {
-                final task = taskProvider.tasks[index];
-            
-                return TaskCardWidget(
-                  title: task.title,
-                  subtitle: task.subtitle,
-                  icon: task.icon,
-                );
-              },
-            ),
+      // 🔥 REPLACED PROVIDER WITH STREAMBUILDER FOR REAL-TIME FIREBASE DATA 🔥
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('tasks')
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text("No tasks yet. Add one!"));
+          }
+
+          final tasks = snapshot.data!.docs;
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: tasks.length,
+            itemBuilder: (context, index) {
+              final taskDoc = tasks[index];
+              final data = taskDoc.data() as Map<String, dynamic>;
+              final taskId = taskDoc.id;
+
+              // Wrapped in Dismissible so you can swipe to delete!
+              return Dismissible(
+                key: Key(taskId),
+                direction: DismissDirection.endToStart,
+                background: Container(
+                  color: Colors.red,
+                  alignment: Alignment.centerRight,
+                  padding: const EdgeInsets.only(right: 20),
+                  child: const Icon(Icons.delete, color: Colors.white),
+                ),
+                onDismissed: (direction) async {
+                  // 🔥 DIRECT FIREBASE DELETE LOGIC 🔥
+                  try {
+                    await FirebaseFirestore.instance.collection('tasks').doc(taskId).delete();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Task Deleted"),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    print("Error deleting task: $e");
+                  }
+                },
+                child: TaskCardWidget(
+                  title: data['title'] ?? 'No Title',
+                  subtitle: data['subtitle'] ?? '',
+                  // Convert integer icon code back to an IconData object if it exists
+                  icon: data['iconCode'] != null 
+                      ? IconData(data['iconCode'], fontFamily: 'MaterialIcons') 
+                      : Icons.task, 
+                ),
+              );
+            },
           );
         }
       ),
@@ -57,10 +88,10 @@ class _UiPageState extends State<UiPage> {
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.of(context)
-          .push(MaterialPageRoute(builder: (context) => AddTaskPage()));
+          .push(MaterialPageRoute(builder: (context) => const AddTaskPage()));
         },
-        child: Icon(Icons.add),
         backgroundColor: Colors.purpleAccent,
+        child: const Icon(Icons.add),
       ),
     );
   }
